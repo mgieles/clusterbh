@@ -7,7 +7,7 @@ setup(
     author_email='mgieles@gmail.com',
     packages=['evolvegcbh'],
     scripts=['evolvegcbh/evolvegcbh.py'],
-    url='http://pypi.python.org/pypi/evolvegcbh',
+    url='http://githb.com/mgieles/evolvegcbh',
     license='LICENSE.txt',
     description='Fast model for GC with BHs',
     long_description=open('README.md').read(),
