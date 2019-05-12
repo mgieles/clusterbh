@@ -27,11 +27,11 @@ class evolvegcbh:
         self.fret = 1        
         
         self.tsev = 2
-        self.alpha =  1 
-        self.beta = 0.00445
-        self.nu = 0.07
-        self.a1 = 1 
-        self.a2 = 0
+        self.alpha =  6.22
+        self.beta = 0.00259
+        self.nu = 0.0765
+        self.a1 = 1.91
+        self.a2 = 0 # ingore 2nd order for now
 
         # Check input parameters
         if kwargs is not None:
