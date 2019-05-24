@@ -26,13 +26,17 @@ class evolvegcbh:
         self.kick = False
         self.fret = 1        
         
-        self.tsev = 2
+        self.tsev = 2.
         self.alpha =  6.22
         self.beta = 0.00259
         self.nu = 0.0765
         self.a1 = 1.91
         self.a2 = 0 # ingore 2nd order for now
 
+        # Some integration params
+        self.tend = 12e3
+        self.dtout = 10 # Myr
+        
         # Check input parameters
         if kwargs is not None:
             for key, value in kwargs.iteritems():
@@ -42,7 +46,9 @@ class evolvegcbh:
             self.fret = erf(self.vesc0/self.v0)**3
 
         self.trh0 = self._trh(self.M0, self.rh0, self.f0*self.fret)
-                    
+
+        self.tcc = self.alpha*self.trh0
+
         self.evolve(N, rhoh)
 
     def rk4(self, t, y, ydot, dt):
@@ -73,14 +79,14 @@ class evolvegcbh:
         fbh = Mbh/M
         
         trh = self._trh(M, rh, fbh)
-        tcc = self.alpha*self.trh0
+        tcc = self.tcc 
         tsev = self.tsev
 
         Mst_dot, rh_dot, Mbh_dot = 0, 0, 0
         
         # Stellar mass loss
-        if t>tsev:
-            Mst_dot -= self.nu*Mst/t 
+        if t>=tsev:
+            Mst_dot -= self.nu*Mst/t
             rh_dot -= Mst_dot/M*rh 
         
         # BH escape
@@ -111,15 +117,19 @@ class evolvegcbh:
         sol.set_initial_value(y,0)
     
         t = [0]
-        tnext = self.tsev
 
-        while t[-1] < 15e3:
-            dt =  0.05*max([t[-1],self.tsev])
-            y = self.rk4(t[-1], y, self.odes, dt)
-            Mst.append(y[0])
-            Mbh.append(y[1])
-            rh.append(y[2])
-            t.append(t[-1]+dt)
+        while t[-1] <= self.tend:
+            tnext = t[-1] + self.dtout
+
+            sol.integrate(tnext)
+
+            #dt =  1 #0.05*t[-1] if t[-1] > 0 else min([self.tsev, self.tcc])
+            #y = self.rk4(t[-1], y, self.odes, dt)
+            
+            Mst.append(sol.y[0])
+            Mbh.append(sol.y[1])
+            rh.append(sol.y[2])
+            t.append(tnext)
 
         self.t = array(t)
         self.Mst = array(Mst)
@@ -130,3 +140,8 @@ class evolvegcbh:
         self.M = self.Mst + self.Mbh
         self.fbh = self.Mbh/self.M
 
+
+#import cProfile
+#cProfile.run('ev=evolvegcbh(1e5, 1e3)')
+
+#xprint ev.rh[-1], ev.Mbh[-1]
