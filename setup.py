@@ -1,13 +1,13 @@
 from distutils.core import setup
 
 setup(
-    name='evolvegcbh',
+    name='clusterbh',
     version='0.1.0',
     author='Mark Gieles',
     author_email='mgieles@gmail.com',
-    packages=['evolvegcbh'],
-    scripts=['evolvegcbh/evolvegcbh.py'],
-    url='http://githb.com/mgieles/evolvegcbh',
+    packages=['clusterbh'],
+    scripts=['clusterbh/clusterbh.py'],
+    url='http://githb.com/mgieles/clusterbh',
     license='LICENSE.txt',
     description='Fast model for GC with BHs',
     long_description=open('README.md').read(),

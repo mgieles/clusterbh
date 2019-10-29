@@ -2,12 +2,13 @@ from __future__ import division
 import numpy
 from pylab import log, sqrt, exp
 from scipy.integrate import ode
+from scipy.special import hyp2f1
 from numpy import array
 from pylab import pi, sqrt, log, log10, sin
 from readcol import readcol
 from scipy.special import erf
 
-class ClusterBH:
+class clusterBH:
     def __init__(self, N, rhoh, **kwargs):
         self.G  = 0.004499 # pc^3 /Msun /Myr^2
 
@@ -16,53 +17,68 @@ class ClusterBH:
         self.N = N
         self.M0 = self.m0*N
         self.rh0 = (3*self.M0/(8*pi*rhoh))**(1./3)
-        self.vesc0 = 50*(self.M0/1e5)**(1./3)*(rhoh/1e5)**(1./6)
-
-        # Model parameters
-        self.v0 = 31.5
-        self.zeta = 0.1
-        self.a0 = 1
-        self.f0 = 0.06
-        self.kick = False
-        self.fret = 1        
+        self.fc = 1 # equation (50)
         
+        # BH MF
+        self.mlo = 3
+        self.mup = 30
+        self.alpha = 0.5
+        
+        # Model parameters
+        self.zeta = 0.1
+        self.a0 = 1 # fix zeroth order
+        self.a2 = 0 # ignore 2nd order for now
+        self.f0 = 0.06  # for "metal-poor" GCs
+        self.kick = False
+        self.fretm = 1        
         self.tsev = 2.
-        self.alpha =  6.22
-        self.beta = 0.00259
-        self.nu = 0.0765
-        self.a1 = 1.91
-        self.a2 = 0 # ingore 2nd order for now
+
+        # Parameters that were fit to N-body
+        self.ntrh =  3.21
+        self.beta = 0.00280
+        self.nu = 0.0823
+        self.a1 = 1.47
+
+        self.sigmans = 265 # km/s
+        self.mns = 1.4 # Msun
 
         # Some integration params
         self.tend = 12e3
-        self.dtout = 10 # Myr
-        
+        self.dtout = 2 # Myr
+
         # Check input parameters
         if kwargs is not None:
             for key, value in kwargs.iteritems():
                 setattr(self, key, value)
 
+        self.vesc0 = 50*(self.M0/1e5)**(1./3)*(rhoh/1e5)**(1./6)
+                        
+        self.vesc0 *= self.fc
+        
         if (self.kick):
-            self.fret = erf(self.vesc0/self.v0)**3
+            mb = (9*pi/2)**(1./6)*self.sigmans*self.mns/self.vesc0
+            mu, ml, a, a2 = self.mup, self.mlo, self.alpha, self.alpha + 2
+            
+            qul, qub, qlb = mu/ml, mu/mb, ml/mb
 
-        self.trh0 = self._trh(self.M0, self.rh0, self.f0*self.fret)
-        self.tcc = self.alpha*self.trh0
+            b = a2/3
+
+            h1 = hyp2f1(1,b,b+1, -qub**3)
+            h2 = hyp2f1(1,b,b+1, -qlb**3)
+        
+            if a != -2:
+                self.fretm = 1 - (qul**a2*h1 - h2)/(qul**a2-1)
+            else:
+                self.fretm = log( (qub**3+1)/(qlb**3+1) )/log(qul**3)
+
+            
+        self.trh0 = self._trh(self.M0, self.rh0, self.f0*self.fretm)
+        self.tcc = self.ntrh*self.trh0
 
         self.evolve(N, rhoh)
 
-    def rk4(self, t, y, ydot, dt):
-        # Take RK4 step
-        k1 = ydot(t, y)*dt
-        k2 = ydot(t + 0.5*dt, y + 0.5*k1)*dt
-        k3 = ydot(t + 0.5*dt, y + 0.5*k2)*dt
-        k4 = ydot(t + dt, y + k3)*dt
-        y += (k1 + 2*(k2 + k3) + k4)/6
-        return y
-
     def _psi(self, fbh):
-        mbh = 3 + (18.5-3)*sqrt(fbh)
-        psi = self.a0  + mbh/18.5*self.a1*abs(fbh)/0.01 + self.a2*(abs(fbh)/0.01)**2
-        #psi = self.a0  + self.a1*abs(fbh)/0.01 + self.a2*(abs(fbh)/0.01)**2 
+        psi = self.a0  + self.a1*abs(fbh)/0.01 + self.a2*(abs(fbh)/0.01)**2
         return psi
     
     def _trh(self, M, rh, fbh):
@@ -93,7 +109,6 @@ class ClusterBH:
         
         # BH escape
         if t>tcc:
-            rh_dot = 0 # Note reset of rh_dot
             rh_dot += self.zeta*rh/trh
             rh_dot += 2*Mst_dot/M * rh
             
@@ -109,7 +124,7 @@ class ClusterBH:
 
     def evolve(self, N, rhoh):
         Mst = [self.M0]
-        Mbh = [self.fret*self.f0*self.M0]
+        Mbh = [self.fretm*self.f0*self.M0]
         rh = [self.rh0]
         
         y = [Mst[0], Mbh[0], rh[0]]
@@ -125,9 +140,6 @@ class ClusterBH:
 
             sol.integrate(tnext)
 
-            #dt =  1 #0.05*t[-1] if t[-1] > 0 else min([self.tsev, self.tcc])
-            #y = self.rk4(t[-1], y, self.odes, dt)
-            
             Mst.append(sol.y[0])
             Mbh.append(sol.y[1])
             rh.append(sol.y[2])
@@ -143,7 +155,3 @@ class ClusterBH:
         self.fbh = self.Mbh/self.M
 
 
-#import cProfile
-#cProfile.run('ev=evolvegcbh(1e5, 1e3)')
-
-#xprint ev.rh[-1], ev.Mbh[-1]
