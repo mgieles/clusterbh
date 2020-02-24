@@ -5,7 +5,7 @@ from scipy.integrate import ode
 from scipy.special import hyp2f1
 from numpy import array
 from pylab import pi, sqrt, log, log10, sin
-from readcol import readcol
+#from readcol import readcol
 from scipy.special import erf
 
 class clusterBH:
@@ -33,6 +33,7 @@ class clusterBH:
         self.fretm = 1        
         self.tsev = 2.
 
+        
         # Parameters that were fit to N-body
         self.ntrh =  3.21
         self.beta = 0.00280
@@ -46,9 +47,15 @@ class clusterBH:
         self.tend = 12e3
         self.dtout = 2 # Myr
 
+        self.output = False
+
+
+        # Mass loss mechanism
+        self.tidal = False
+        
         # Check input parameters
         if kwargs is not None:
-            for key, value in kwargs.iteritems():
+            for key, value in kwargs.items():
                 setattr(self, key, value)
 
         self.vesc0 = 50*(self.M0/1e5)**(1./3)*(rhoh/1e5)**(1./6)
@@ -57,6 +64,7 @@ class clusterBH:
         
         if (self.kick):
             mb = (9*pi/2)**(1./6)*self.sigmans*self.mns/self.vesc0
+            self.mb = mb
             mu, ml, a, a2 = self.mup, self.mlo, self.alpha, self.alpha + 2
             
             qul, qub, qlb = mu/ml, mu/mb, ml/mb
@@ -71,7 +79,8 @@ class clusterBH:
             else:
                 self.fretm = log( (qub**3+1)/(qlb**3+1) )/log(qul**3)
 
-            
+        self.Mbh0 = self.fretm*self.f0*self.M0
+
         self.trh0 = self._trh(self.M0, self.rh0, self.f0*self.fretm)
         self.tcc = self.ntrh*self.trh0
 
@@ -88,6 +97,34 @@ class clusterBH:
         else:
             return 1e-99
 
+
+    def find_mmax(self, Mbh):
+        a2 = self.alpha+2
+        
+        # Note that a warning for alpha = -2 is needed
+        if (self.kick):
+            def integr(mm, qmb, qlb):
+                a2 = self.alpha+2
+                b = a2/3
+                h1 = hyp2f1(1,b,b+1, -qmb**3)
+                h2 = hyp2f1(1,b,b+1, -qlb**3)
+                
+                return mm**a2*(1-h1) - self.mlo**a2*(1-h2)
+
+            # invert eq. 52 from AG20
+            Np = 1000
+            mmax_ = numpy.linspace(self.mlo, self.mup, Np)
+            qml, qmb, qlb  = mmax_/self.mlo, mmax_/self.mb, self.mlo/self.mb
+
+            A = Mbh[0]/integr(self.mup, self.mup/self.mb, qlb)
+
+            Mbh_ = A * integr(mmax_, qmb, qlb)
+            mmax = numpy.interp(Mbh, Mbh_, mmax_)
+        else:
+            # eq 51 in AG20
+            mmax = (Mbh/self.Mbh0 * (self.mup**a2 - self.mlo**a2) + self.mlo**a2)**(1./a2)
+        return mmax
+            
     def odes(self, t, y):
         Mst = y[0]
         Mbh = y[1]
@@ -106,7 +143,15 @@ class clusterBH:
         if t>=tsev:
             Mst_dot -= self.nu*Mst/t
             rh_dot -= Mst_dot/M*rh 
-        
+            
+            # Add tidal mass loss
+        if (self.tidal):
+            # Remove mass needed to turn over GCMF
+            # Delta M ~ 2e5 Msun
+            # Dekta t ~ 10 Gyr
+            # Mdot ~ 20 Msun/Myr
+            Mst_dot -= 20
+
         # BH escape
         if t>tcc:
             rh_dot += self.zeta*rh/trh
@@ -116,6 +161,8 @@ class clusterBH:
                 Mbh_dot = -self.beta*M/trh 
                 rh_dot += 2*Mbh_dot/M * rh
 
+
+
         derivs = [Mst_dot]
         derivs.append(Mbh_dot)
         derivs.append(rh_dot)
@@ -123,10 +170,10 @@ class clusterBH:
         return numpy.array(derivs)
 
     def evolve(self, N, rhoh):
-        Mst = [self.M0]
-        Mbh = [self.fretm*self.f0*self.M0]
+        Mst = [self.M0]   #  MG 29/1/2020 should be self.M0-self.Mbh0 ???
+        Mbh = [self.Mbh0]
         rh = [self.rh0]
-        
+
         y = [Mst[0], Mbh[0], rh[0]]
 
         sol = ode(self.odes)
@@ -149,9 +196,28 @@ class clusterBH:
         self.Mst = array(Mst)
         self.Mbh = array(Mbh)
         self.rh = array(rh)
+        self.mmax = self.find_mmax(self.Mbh)
+
+
         
         # Some derived quantities
         self.M = self.Mst + self.Mbh
         self.fbh = self.Mbh/self.M
+
+        self.E = -self.G*self.M**2/(2*self.rh)
+        self.trh = numpy.zeros_like(self.M)
+        for i in range(len(self.trh)):
+            self.trh[i] = self._trh(self.M[i], self.rh[i], self.fbh[i])
+
+        if (self.output):
+            f = open("cluster.txt","w")
+            for i in range(len(self.t)):
+                f.write("%12.5e %12.5e %12.5e %12.5e %12.5e\n"%(self.t[i]/1e3, self.Mbh[i],
+                                                                self.M[i], self.rh[i],
+                                                                self.mmax[i]))
+            f.close()
+
+
+
 
 
