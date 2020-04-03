@@ -5,7 +5,6 @@ from scipy.integrate import ode
 from scipy.special import hyp2f1
 from numpy import array
 from pylab import pi, sqrt, log, log10, sin
-#from readcol import readcol
 from scipy.special import erf
 
 class clusterBH:
@@ -48,7 +47,7 @@ class clusterBH:
         self.dtout = 2 # Myr
 
         self.output = False
-
+        self.outfile = "cluster.txt"
 
         # Mass loss mechanism
         self.tidal = False
@@ -210,7 +209,7 @@ class clusterBH:
             self.trh[i] = self._trh(self.M[i], self.rh[i], self.fbh[i])
 
         if (self.output):
-            f = open("cluster.txt","w")
+            f = open(self.outfile,"w")
             for i in range(len(self.t)):
                 f.write("%12.5e %12.5e %12.5e %12.5e %12.5e\n"%(self.t[i]/1e3, self.Mbh[i],
                                                                 self.M[i], self.rh[i],
