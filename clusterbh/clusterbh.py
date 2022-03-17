@@ -17,6 +17,7 @@ class clusterBH:
         self.M0 = self.m0*N
         self.rh0 = (3*self.M0/(8*pi*rhoh))**(1./3)
         self.fc = 1 # equation (50)
+        self.rg = 8 # [kpc]
         
         # BH MF
         self.mlo = 3
@@ -31,7 +32,6 @@ class clusterBH:
         self.kick = False
         self.fretm = 1        
         self.tsev = 2.
-
         
         # Parameters that were fit to N-body
         self.ntrh =  3.21
@@ -50,7 +50,9 @@ class clusterBH:
         self.outfile = "cluster.txt"
 
         # Mass loss mechanism
-        self.tidal = False
+        self.tidal = True
+        self.Rht = 0.125 # ratio of rh/rt to give correct Mdot [17/3/22]
+        self.Vc = 220. # [km/s] circular velocity of singular isothermal galaxy
         
         # Check input parameters
         if kwargs is not None:
@@ -85,12 +87,16 @@ class clusterBH:
 
         self.evolve(N, rhoh)
 
+    def _rt(self, M):
+        O2 = (self.Vc*1.023/(self.rg*1e3))**2
+        return (self.G*M/(2*O2))**(1./3)
+
     def _psi(self, fbh):
         psi = self.a0  + self.a1*abs(fbh)/0.01 + self.a2*(abs(fbh)/0.01)**2
         return psi
     
     def _trh(self, M, rh, fbh):
-        m = M/self.N
+        m = self.M0/self.N # changed to M0 to keep m constant [17/3/22]
         if M>0 and rh>0:
             return 0.138*sqrt(M*rh**3/self.G)/(m*self._psi(fbh)*10)
         else:
@@ -122,6 +128,8 @@ class clusterBH:
         else:
             # eq 51 in AG20
             mmax = (Mbh/self.Mbh0 * (self.mup**a2 - self.mlo**a2) + self.mlo**a2)**(1./a2)
+
+        # TBD: Set to 0 when MBH = 0
         return mmax
             
     def odes(self, t, y):
@@ -143,14 +151,11 @@ class clusterBH:
             Mst_dot -= self.nu*Mst/t
             rh_dot -= Mst_dot/M*rh 
             
-            # Add tidal mass loss
+        # Add tidal mass loss
         if (self.tidal):
-            # Remove mass needed to turn over GCMF
-            # Delta M ~ 2e5 Msun
-            # Dekta t ~ 10 Gyr
-            # Mdot ~ 20 Msun/Myr
-            Mst_dot -= 20
-
+            xi = 0.6*self.zeta*(rh/self._rt(M)/self.Rht)**1.5
+            Mst_dot -= xi*M/trh
+            
         # BH escape
         if t>tcc:
             rh_dot += self.zeta*rh/trh
@@ -159,7 +164,6 @@ class clusterBH:
             if Mbh > 0:
                 Mbh_dot = -self.beta*M/trh 
                 rh_dot += 2*Mbh_dot/M * rh
-
 
 
         derivs = [Mst_dot]
@@ -181,7 +185,7 @@ class clusterBH:
     
         t = [0]
 
-        while t[-1] <= self.tend:
+        while t[-1] <= self.tend and Mst[-1]>1: # [17/3/22] stop when no more stars
             tnext = t[-1] + self.dtout
 
             sol.integrate(tnext)
