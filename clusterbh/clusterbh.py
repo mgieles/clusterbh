@@ -12,7 +12,7 @@ class clusterBH:
         self.G  = 0.004499 # pc^3 /Msun /Myr^2
 
         # Cluster ICs
-        self.m0 = 0.638    # For Kroupa (2001) IMF 0.1-100 Msun
+        self.m0 = 0.638  # For Kroupa (2001) IMF 0.1-100 Msun
         self.N = N
         self.M0 = self.m0*N
         self.rh0 = (3*self.M0/(8*pi*rhoh))**(1./3)
@@ -187,9 +187,7 @@ class clusterBH:
 
         while t[-1] <= self.tend and Mst[-1]>1: # [17/3/22] stop when no more stars
             tnext = t[-1] + self.dtout
-
             sol.integrate(tnext)
-
             Mst.append(sol.y[0])
             Mbh.append(sol.y[1])
             rh.append(sol.y[2])
