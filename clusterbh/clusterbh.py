@@ -134,9 +134,6 @@ class clusterBH:
         return mmax
 
     def _logcheck(self, t, y):
-        print(" logcheck ",t,y[0])
-        
-        #return 0 if (y[0]>self.Mst_min) else -1
         return 0 if (y[0]>self.Mst_min) else -1
         
     def odes(self, t, y):
@@ -202,7 +199,6 @@ class clusterBH:
                 rh.append(sol.y[2])
                 t.append(tnext)
 
-        print(" final =",Mst[-1])
         self.t = array(t)
         self.Mst = array(Mst)
         self.Mbh = array(Mbh)
