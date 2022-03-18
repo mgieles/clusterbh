@@ -45,10 +45,12 @@ class clusterBH:
         # Some integration params
         self.tend = 12e3
         self.dtout = 2 # Myr
-
+        self.Mst_min = 100 # [Msun] stop criterion
+        
         self.output = False
         self.outfile = "cluster.txt"
 
+    
         # Mass loss mechanism
         self.tidal = True
         self.Rht = 0.125 # ratio of rh/rt to give correct Mdot [17/3/22]
@@ -102,7 +104,6 @@ class clusterBH:
         else:
             return 1e-99
 
-
     def find_mmax(self, Mbh):
         a2 = self.alpha+2
         
@@ -131,7 +132,13 @@ class clusterBH:
 
         # TBD: Set to 0 when MBH = 0
         return mmax
-            
+
+    def _logcheck(self, t, y):
+        print(" logcheck ",t,y[0])
+        
+        #return 0 if (y[0]>self.Mst_min) else -1
+        return 0 if (y[0]>self.Mst_min) else -1
+        
     def odes(self, t, y):
         Mst = y[0]
         Mbh = y[1]
@@ -165,7 +172,6 @@ class clusterBH:
                 Mbh_dot = -self.beta*M/trh 
                 rh_dot += 2*Mbh_dot/M * rh
 
-
         derivs = [Mst_dot]
         derivs.append(Mbh_dot)
         derivs.append(rh_dot)
@@ -181,28 +187,33 @@ class clusterBH:
 
         sol = ode(self.odes)
         sol.set_integrator('dopri5') 
+        sol.set_solout(self._logcheck)
         sol.set_initial_value(y,0)
     
         t = [0]
 
-        while t[-1] <= self.tend and Mst[-1]>1: # [17/3/22] stop when no more stars
+        while t[-1] <= self.tend and sol.y[0]>self.Mst_min: # [17/3/22] stop when stars are lost
             tnext = t[-1] + self.dtout
-            sol.integrate(tnext)
-            Mst.append(sol.y[0])
-            Mbh.append(sol.y[1])
-            rh.append(sol.y[2])
-            t.append(tnext)
 
+            sol.integrate(tnext)
+            if sol.y[0]>self.Mst_min:
+                Mst.append(sol.y[0])
+                Mbh.append(sol.y[1])
+                rh.append(sol.y[2])
+                t.append(tnext)
+
+        print(" final =",Mst[-1])
         self.t = array(t)
         self.Mst = array(Mst)
         self.Mbh = array(Mbh)
         self.rh = array(rh)
-        self.mmax = self.find_mmax(self.Mbh)
-
-
+        cbh = (self.Mbh>0)        
+        self.mmax = numpy.zeros_like(self.Mbh)
+        self.mmax[cbh] = self.find_mmax(self.Mbh[cbh])
         
         # Some derived quantities
         self.M = self.Mst + self.Mbh
+        self.rt = self._rt(self.M)
         self.fbh = self.Mbh/self.M
 
         self.E = -self.G*self.M**2/(2*self.rh)
